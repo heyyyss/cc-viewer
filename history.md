@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.18 (2026-03-05)
+
+- Fix: duplicate request entries in log — in-flight requests now marked with `inProgress: true`, removed on completion to preserve original payload
+- Fix: filter out in-flight requests and legacy status-0 entries from request list
+
 ## 1.4.17 (2026-03-05)
 
 - Refactor: MainAgent detection logic consolidated into dedicated functions
@@ -7,8 +12,6 @@
 - Refactor: `interceptor.js` now uses `isMainAgentRequest()` for consistent MainAgent marking
 - Refactor: `contentFilter.js` enhanced with new architecture detection for accurate filtering
 - Fix: MainAgent detection now correctly identifies both old and new Claude Code architectures
-- Fix: duplicate request entries in log — in-flight requests now marked with `inProgress: true`, removed on completion to preserve original payload
-- Fix: filter out in-flight requests and legacy status-0 entries from request list
 
 ## 1.4.16 (2026-03-04)
 
