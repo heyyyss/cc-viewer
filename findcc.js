@@ -61,6 +61,54 @@ export function resolveCliPath() {
   return join(globalRoot || resolve(__dirname, '..'), PACKAGES[0], CLI_ENTRY);
 }
 
+/**
+ * 查找 npm 版本的 claude（包括 nvm 安装）
+ * 返回 node_modules 中的 claude cli.js 路径
+ */
+export function resolveNpmClaudePath() {
+  // 1. 尝试 which/command -v 找到 npm 安装的 claude
+  for (const cmd of [`which ${BINARY_NAME}`, `command -v ${BINARY_NAME}`]) {
+    try {
+      const result = execSync(cmd, { encoding: 'utf-8', shell: true, env: process.env }).trim();
+      // 排除 shell function 的输出（多行说明不是路径）
+      if (result && !result.includes('\n') && existsSync(result)) {
+        // 只接受 npm 安装的符号链接（解析后指向 node_modules）
+        try {
+          const real = realpathSync(result);
+          if (real.includes('node_modules')) {
+            // 找到 npm 版本，返回 cli.js 的路径
+            // real 可能是 .../node_modules/@anthropic-ai/claude-code/bin/claude
+            // 我们需要返回 .../node_modules/@anthropic-ai/claude-code/cli.js
+            const match = real.match(/(.*node_modules\/@[^/]+\/[^/]+)\//);
+            if (match) {
+              const packageDir = match[1];
+              const cliPath = join(packageDir, CLI_ENTRY);
+              if (existsSync(cliPath)) {
+                return cliPath;
+              }
+            }
+          }
+        } catch {}
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. 尝试从全局 node_modules 查找
+  const globalRoot = getGlobalNodeModulesDir();
+  if (globalRoot) {
+    for (const packageName of PACKAGES) {
+      const cliPath = join(globalRoot, packageName, CLI_ENTRY);
+      if (existsSync(cliPath)) {
+        return cliPath;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function resolveNativePath() {
   // 1. 尝试 which/command -v（继承当前 process.env PATH）
   for (const cmd of [`which ${BINARY_NAME}`, `command -v ${BINARY_NAME}`]) {

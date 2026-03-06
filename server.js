@@ -26,9 +26,15 @@ const IGNORED_PATTERNS = new Set([
 
 // 工作区模式：保存 Claude 额外参数，供 launch API 使用
 let _workspaceClaudeArgs = [];
+let _workspaceClaudePath = null;
+let _workspaceIsNpmVersion = false;
 let _workspaceLaunched = false; // 工作区是否已经启动了会话
 export function setWorkspaceClaudeArgs(args) {
   _workspaceClaudeArgs = args;
+}
+export function setWorkspaceClaudePath(path, isNpm) {
+  _workspaceClaudePath = path;
+  _workspaceIsNpmVersion = isNpm;
 }
 
 
@@ -504,7 +510,7 @@ async function handleRequest(req, res) {
         const proxyPort = process.env.CCV_PROXY_PORT;
         if (proxyPort) {
           const { spawnClaude } = await import('./pty-manager.js');
-          await spawnClaude(parseInt(proxyPort), wsPath, _workspaceClaudeArgs);
+          await spawnClaude(parseInt(proxyPort), wsPath, _workspaceClaudeArgs, _workspaceClaudePath, _workspaceIsNpmVersion);
         }
 
         _workspaceLaunched = true;

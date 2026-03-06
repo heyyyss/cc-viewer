@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.22 (2026-03-06)
+
+- Fix: plugin enable/disable state now correctly displayed in UI when plugin defines custom `name` property different from filename
+- Feat: `ccv -c` mode now prioritizes npm-installed claude (including nvm installations), falling back to native binary if not found
+- Feat: added `resolveNpmClaudePath()` to detect and use npm/nvm-installed claude in CLI mode
+- Fix: `pty-manager.js` now supports launching npm-installed claude via `node cli.js` instead of binary
+
 ## 1.4.21 (2026-03-06)
 
 - Fix: LAN mobile access — all API fetch and SSE EventSource requests now carry the access token, fixing 403 errors that caused empty chat view on mobile devices

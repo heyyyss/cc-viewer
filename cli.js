@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { t } from './i18n.js';
-import { INJECT_IMPORT, resolveCliPath, resolveNativePath, buildShellCandidates } from './findcc.js';
+import { INJECT_IMPORT, resolveCliPath, resolveNativePath, resolveNpmClaudePath, buildShellCandidates } from './findcc.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -233,8 +233,15 @@ async function runProxyCommand(args) {
 }
 
 async function runCliMode(extraClaudeArgs = [], cwd) {
-  const nativePath = resolveNativePath();
-  if (!nativePath) {
+  // 首先尝试 npm 版本（包括 nvm 安装），找不到再尝试 native 版本
+  let claudePath = resolveNpmClaudePath();
+  let isNpmVersion = !!claudePath;
+
+  if (!claudePath) {
+    claudePath = resolveNativePath();
+  }
+
+  if (!claudePath) {
     console.error(t('cli.cMode.notFound'));
     process.exit(1);
   }
@@ -276,7 +283,7 @@ async function runCliMode(extraClaudeArgs = [], cwd) {
   // 3. 启动 PTY 中的 claude
   const { spawnClaude, killPty } = await import('./pty-manager.js');
   try {
-    await spawnClaude(proxyPort, workingDir, extraClaudeArgs);
+    await spawnClaude(proxyPort, workingDir, extraClaudeArgs, claudePath, isNpmVersion);
   } catch (err) {
     console.error('[CC Viewer] Failed to spawn Claude:', err.message);
     serverMod.stopViewer();
@@ -304,8 +311,15 @@ async function runCliMode(extraClaudeArgs = [], cwd) {
 }
 
 async function runCliModeWorkspaceSelector(extraClaudeArgs = []) {
-  const nativePath = resolveNativePath();
-  if (!nativePath) {
+  // 首先尝试 npm 版本（包括 nvm 安装），找不到再尝试 native 版本
+  let claudePath = resolveNpmClaudePath();
+  let isNpmVersion = !!claudePath;
+
+  if (!claudePath) {
+    claudePath = resolveNativePath();
+  }
+
+  if (!claudePath) {
     console.error(t('cli.cMode.notFound'));
     process.exit(1);
   }
@@ -328,8 +342,9 @@ async function runCliModeWorkspaceSelector(extraClaudeArgs = []) {
 
   const port = serverMod.getPort();
 
-  // 保存 extraClaudeArgs 供后续 launch 使用
+  // 保存 extraClaudeArgs 和 claudePath 供后续 launch 使用
   serverMod.setWorkspaceClaudeArgs(extraClaudeArgs);
+  serverMod.setWorkspaceClaudePath(claudePath, isNpmVersion);
 
   // 自动打开浏览器
   const url = `http://127.0.0.1:${port}`;

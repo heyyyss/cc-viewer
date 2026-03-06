@@ -25,7 +25,7 @@ function fixSpawnHelperPermissions() {
   } catch {}
 }
 
-export async function spawnClaude(proxyPort, cwd, extraArgs = []) {
+export async function spawnClaude(proxyPort, cwd, extraArgs = [], claudePath = null, isNpmVersion = false) {
   if (ptyProcess) {
     killPty();
   }
@@ -35,9 +35,12 @@ export async function spawnClaude(proxyPort, cwd, extraArgs = []) {
 
   fixSpawnHelperPermissions();
 
-  const claudePath = resolveNativePath();
+  // 如果没有提供 claudePath，尝试自动查找
   if (!claudePath) {
-    throw new Error('claude not found');
+    claudePath = resolveNativePath();
+    if (!claudePath) {
+      throw new Error('claude not found');
+    }
   }
 
   const env = { ...process.env };
@@ -48,13 +51,20 @@ export async function spawnClaude(proxyPort, cwd, extraArgs = []) {
     env: { ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL }
   });
 
-  const args = ['--settings', settingsJson, ...extraArgs];
+  let command = claudePath;
+  let args = ['--settings', settingsJson, ...extraArgs];
+
+  // 如果是 npm 版本（cli.js），需要使用 node 来运行
+  if (isNpmVersion && claudePath.endsWith('.js')) {
+    command = process.execPath; // node 可执行文件路径
+    args = [claudePath, '--settings', settingsJson, ...extraArgs];
+  }
 
   lastExitCode = null;
   outputBuffer = '';
   currentWorkspacePath = cwd || process.cwd();
 
-  ptyProcess = pty.spawn(claudePath, args, {
+  ptyProcess = pty.spawn(command, args, {
     name: 'xterm-256color',
     cols: 120,
     rows: 30,
