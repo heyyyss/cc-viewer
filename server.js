@@ -5,8 +5,33 @@ import { readFileSync, writeFileSync, existsSync, watchFile, unwatchFile, statSy
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
 import { homedir, userInfo, platform, networkInterfaces } from 'node:os';
-import { execSync } from 'node:child_process';
+import { execFile, exec, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { Worker } from 'node:worker_threads';
+
+const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
+
+// execFile with stdin input support (for git check-ignore --stdin)
+function execWithStdin(cmd, args, input, options) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', d => { stdout += d; });
+    child.stderr.on('data', d => { stderr += d; });
+    child.on('error', reject);
+    child.on('close', code => {
+      // git check-ignore exits 1 when no files are ignored — treat as success
+      resolve(stdout);
+    });
+    if (options?.timeout) {
+      setTimeout(() => { try { child.kill(); } catch {} reject(new Error('timeout')); }, options.timeout);
+    }
+    child.stdin.write(input);
+    child.stdin.end();
+  });
+}
 import { LOG_FILE, _initPromise, _resumeState, resolveResumeChoice, _projectName, _logDir, _cachedApiKey, _cachedAuthHeader, _cachedHaikuModel, initForWorkspace, resetWorkspace } from './interceptor.js';
 import { LOG_DIR } from './findcc.js';
 import { t, detectLanguage } from './i18n.js';
@@ -39,8 +64,16 @@ export function setWorkspaceClaudePath(path, isNpm) {
 
 // macOS user profile (avatar + display name), cached once
 let _userProfile = null;
-function getUserProfile() {
+let _userProfilePromise = null;
+async function getUserProfile() {
   if (_userProfile) return _userProfile;
+  if (_userProfilePromise) return _userProfilePromise;
+  _userProfilePromise = _getUserProfileImpl();
+  _userProfile = await _userProfilePromise;
+  _userProfilePromise = null;
+  return _userProfile;
+}
+async function _getUserProfileImpl() {
   const info = userInfo();
   const name = info.username || 'User';
   let displayName = name;
@@ -48,21 +81,20 @@ function getUserProfile() {
 
   if (platform() === 'darwin') {
     try {
-      const rn = execSync(`dscl . -read /Users/${name} RealName`, { encoding: 'utf-8', timeout: 3000 });
+      const { stdout: rn } = await execFileAsync('dscl', ['.', '-read', `/Users/${name}`, 'RealName'], { encoding: 'utf-8', timeout: 3000 });
       const match = rn.match(/RealName:\n?\s*(.+)/);
       if (match && match[1].trim()) displayName = match[1].trim();
     } catch { }
 
     try {
-      const buf = execSync(`dscl . -read /Users/${name} JPEGPhoto | tail -1 | xxd -r -p`, { timeout: 5000, maxBuffer: 1024 * 1024 });
-      if (buf && buf.length > 100) {
-        avatarBase64 = `data:image/jpeg;base64,${buf.toString('base64')}`;
+      const { stdout } = await execAsync(`dscl . -read /Users/${name} JPEGPhoto | tail -1 | xxd -r -p`, { timeout: 5000, maxBuffer: 1024 * 1024, encoding: 'buffer' });
+      if (stdout && stdout.length > 100) {
+        avatarBase64 = `data:image/jpeg;base64,${stdout.toString('base64')}`;
       }
     } catch { }
   }
 
-  _userProfile = { name: displayName, avatar: avatarBase64 };
-  return _userProfile;
+  return { name: displayName, avatar: avatarBase64 };
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -720,7 +752,7 @@ async function handleRequest(req, res) {
 
   // macOS 用户头像和显示名
   if (url === '/api/user-profile' && method === 'GET') {
-    const profile = getUserProfile();
+    const profile = await getUserProfile();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(profile));
     return;
@@ -754,12 +786,9 @@ async function handleRequest(req, res) {
           return i.type === 'directory' ? `${rel}/` : rel;
         });
         if (names.length > 0) {
-          const result = execSync(`git check-ignore --stdin`, {
+          const result = await execWithStdin('git', ['check-ignore', '--stdin'], names.join('\n'), {
             cwd,
-            input: names.join('\n'),
-            encoding: 'utf-8',
             timeout: 3000,
-            stdio: ['pipe', 'pipe', 'pipe'],
           });
           result.split('\n').filter(Boolean).forEach(line => {
             const name = line.endsWith('/') ? line.slice(0, -1) : line;
@@ -827,7 +856,7 @@ async function handleRequest(req, res) {
   if (url === '/api/git-status' && method === 'GET') {
     try {
       const cwd = process.env.CCV_PROJECT_DIR || process.cwd();
-      const output = execSync('git status --porcelain', { cwd, encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] });
+      const { stdout: output } = await execFileAsync('git', ['status', '--porcelain'], { cwd, encoding: 'utf-8', timeout: 5000 });
       const lines = output.split('\n').filter(line => line.trim());
       const changes = lines.map(line => {
         const status = line.substring(0, 2).trim();
@@ -863,7 +892,7 @@ async function handleRequest(req, res) {
         if (file.includes('..') || file.startsWith('/')) continue;
 
         try {
-          const statusOutput = execSync(`git status --porcelain -- "${file}"`, { cwd, encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] });
+          const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain', '--', file], { cwd, encoding: 'utf-8', timeout: 3000 });
           if (!statusOutput.trim()) continue;
 
           const status = statusOutput.substring(0, 2).trim();
@@ -874,7 +903,7 @@ async function handleRequest(req, res) {
           let is_binary = false;
           if (!is_deleted) {
             try {
-              const diffCheck = execSync(`git diff --numstat HEAD -- "${file}"`, { cwd, encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] });
+              const { stdout: diffCheck } = await execFileAsync('git', ['diff', '--numstat', 'HEAD', '--', file], { cwd, encoding: 'utf-8', timeout: 3000 });
               if (diffCheck.includes('-\t-\t')) {
                 is_binary = true;
               }
@@ -888,7 +917,8 @@ async function handleRequest(req, res) {
             // 获取旧内容（HEAD 版本）
             if (!is_new) {
               try {
-                old_content = execSync(`git show HEAD:"${file}"`, { cwd, encoding: 'utf-8', timeout: 5000, maxBuffer: 5 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] });
+                const { stdout } = await execFileAsync('git', ['show', `HEAD:${file}`], { cwd, encoding: 'utf-8', timeout: 5000, maxBuffer: 5 * 1024 * 1024 });
+                old_content = stdout;
               } catch {
                 old_content = '';
               }
@@ -1288,7 +1318,7 @@ export async function startViewer() {
             const [maj, min, pat] = ccVer.split('.').map(Number);
             if (maj < 2 || (maj === 2 && min === 0 && pat < 69)) {
               const cmd = platform() === 'darwin' ? 'open' : platform() === 'win32' ? 'start' : 'xdg-open';
-              execSync(`${cmd} ${url}`, { stdio: 'ignore', timeout: 5000 });
+              execAsync(`${cmd} ${url}`, { timeout: 5000 }).catch(() => {});
             }
           } catch { }
           // 工作区模式下延迟到选择工作区后再启动监听
