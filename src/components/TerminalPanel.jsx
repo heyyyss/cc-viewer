@@ -435,8 +435,11 @@ class TerminalPanel extends React.Component {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'input', data: seq }));
     }
-    // 手机上不 focus 终端，避免弹出系统软键盘
-    if (!isMobile) {
+    // 手机上不 focus 终端，避免弹出系统软键盘；主动 blur 防止先前已聚焦
+    if (isMobile) {
+      const ta = this.containerRef.current?.querySelector('.xterm-helper-textarea');
+      if (ta) ta.blur();
+    } else {
       this.terminal?.focus();
     }
   };
@@ -446,6 +449,7 @@ class TerminalPanel extends React.Component {
    * 仅当触摸位移 < 阈值时才视为点击并触发按键，否则视为滚动不触发。
    */
   _vkTouchStart = (e) => {
+    e.preventDefault(); // 阻止触摸导致 xterm textarea 获焦弹出键盘
     const touch = e.touches[0];
     this._vkStartX = touch.clientX;
     this._vkStartY = touch.clientY;

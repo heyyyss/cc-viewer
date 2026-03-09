@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.7 (2026-03-09)
+
+- Fix: mobile virtual keyboard no longer pops up when pressing virtual keys (arrows, enter, etc.) — uses preventDefault on touchstart and blur after key send, while preserving normal text input focus
+
 ## 1.5.6 (2026-03-09)
 
 - Fix: hide QR code entry in history log mode on PC
