@@ -54,6 +54,9 @@ class TerminalPanel extends React.Component {
       this.webglAddon = null;
     }
     if (this.terminal) {
+      if (this.terminal.textarea) {
+        this.terminal.textarea.removeEventListener('paste', this._handlePaste, true);
+      }
       this.terminal.dispose();
     }
   }
@@ -109,6 +112,13 @@ class TerminalPanel extends React.Component {
         this.ws.send(JSON.stringify({ type: 'input', data }));
       }
     });
+
+    // 拦截粘贴事件，用 bracketed paste 转义序列包裹，
+    // 防止多行粘贴时换行符被当作 Enter 逐行执行
+    // 使用 capture 阶段确保在 xterm.js 自身的 paste handler 之前执行
+    if (this.terminal.textarea) {
+      this.terminal.textarea.addEventListener('paste', this._handlePaste, true);
+    }
 
     if (isMobile) {
       this._setupMobileTouchScroll();
@@ -436,6 +446,20 @@ class TerminalPanel extends React.Component {
       });
     }
   }
+
+  _handlePaste = (e) => {
+    // 当 shell 已启用 bracketedPasteMode 时，xterm.js 会自动包裹，无需干预
+    if (this.terminal?.modes?.bracketedPasteMode) return;
+    const text = e.clipboardData?.getData('text');
+    if (!text || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    // shell 未启用 bracketed paste 时，手动包裹多行文本，防止换行被当作 Enter 执行
+    if (text.includes('\n') || text.includes('\r')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const wrapped = `\x1b[200~${text}\x1b[201~`;
+      this.ws.send(JSON.stringify({ type: 'input', data: wrapped }));
+    }
+  };
 
   handleVirtualKey = (seq) => {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
