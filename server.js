@@ -53,6 +53,10 @@ let _workspaceClaudeArgs = [];
 let _workspaceClaudePath = null;
 let _workspaceIsNpmVersion = false;
 let _workspaceLaunched = false; // 工作区是否已经启动了会话
+
+// Editor session state (for $EDITOR intercept)
+const editorSessions = new Map(); // sessionId → { filePath, done }
+let terminalWss = null; // WebSocketServer reference for broadcasting
 export function setWorkspaceClaudeArgs(args) {
   _workspaceClaudeArgs = args;
 }
@@ -542,7 +546,7 @@ async function handleRequest(req, res) {
         const proxyPort = process.env.CCV_PROXY_PORT;
         if (proxyPort) {
           const { spawnClaude } = await import('./pty-manager.js');
-          await spawnClaude(parseInt(proxyPort), wsPath, _workspaceClaudeArgs, _workspaceClaudePath, _workspaceIsNpmVersion);
+          await spawnClaude(parseInt(proxyPort), wsPath, _workspaceClaudeArgs, _workspaceClaudePath, _workspaceIsNpmVersion, actualPort);
         }
 
         _workspaceLaunched = true;
@@ -830,16 +834,95 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // === Editor session API (for $EDITOR intercept) ===
+
+  if (url === '/api/editor-open' && method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { sessionId, filePath } = JSON.parse(body);
+        if (!sessionId || !filePath) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing sessionId or filePath' }));
+          return;
+        }
+        editorSessions.set(sessionId, { filePath, done: false });
+        // Broadcast to all terminal WebSocket clients
+        if (terminalWss) {
+          const msg = JSON.stringify({ type: 'editor-open', sessionId, filePath });
+          terminalWss.clients.forEach(client => {
+            if (client.readyState === 1) {
+              try { client.send(msg); } catch {}
+            }
+          });
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid request body' }));
+      }
+    });
+    return;
+  }
+
+  if (url.startsWith('/api/editor-status') && method === 'GET') {
+    const id = parsedUrl.searchParams.get('id');
+    if (!id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing id' }));
+      return;
+    }
+    const session = editorSessions.get(id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ done: session ? session.done : true }));
+    return;
+  }
+
+  if (url === '/api/editor-done' && method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { sessionId } = JSON.parse(body);
+        if (!sessionId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing sessionId' }));
+          return;
+        }
+        const session = editorSessions.get(sessionId);
+        if (session) {
+          session.done = true;
+        }
+        // Clean up after a short delay to allow the polling to pick it up
+        setTimeout(() => editorSessions.delete(sessionId), 5000);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid request body' }));
+      }
+    });
+    return;
+  }
+
   // 读取文件内容 API
   if (url === '/api/file-content' && method === 'GET') {
     const reqPath = parsedUrl.searchParams.get('path');
-    if (!reqPath || reqPath.startsWith('/') || reqPath.includes('..')) {
+    const isEditorSession = parsedUrl.searchParams.get('editorSession') === 'true';
+    if (!reqPath) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Invalid path' }));
       return;
     }
-    const cwd = process.env.CCV_PROJECT_DIR || process.cwd();
-    const targetFile = join(cwd, reqPath);
+    // Allow absolute paths only for editor sessions
+    if (!isEditorSession && (reqPath.startsWith('/') || reqPath.includes('..'))) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid path' }));
+      return;
+    }
+    const targetFile = isEditorSession && reqPath.startsWith('/') ? reqPath : join(process.env.CCV_PROJECT_DIR || process.cwd(), reqPath);
     try {
       if (!existsSync(targetFile)) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -884,8 +967,14 @@ async function handleRequest(req, res) {
         return;
       }
       try {
-        const { path: reqPath, content } = JSON.parse(body);
-        if (!reqPath || reqPath.startsWith('/') || reqPath.includes('..')) {
+        const { path: reqPath, content, editorSession } = JSON.parse(body);
+        if (!reqPath) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid path' }));
+          return;
+        }
+        // Allow absolute paths only for editor sessions
+        if (!editorSession && (reqPath.startsWith('/') || reqPath.includes('..'))) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid path' }));
           return;
@@ -895,8 +984,7 @@ async function handleRequest(req, res) {
           res.end(JSON.stringify({ error: 'Content must be a string' }));
           return;
         }
-        const cwd = process.env.CCV_PROJECT_DIR || process.cwd();
-        const targetFile = join(cwd, reqPath);
+        const targetFile = editorSession && reqPath.startsWith('/') ? reqPath : join(process.env.CCV_PROJECT_DIR || process.cwd(), reqPath);
         writeFileSync(targetFile, content, 'utf-8');
         const stat = statSync(targetFile);
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1616,10 +1704,11 @@ export async function startViewer() {
 async function setupTerminalWebSocket(httpServer) {
   try {
     const { WebSocketServer } = await import('ws');
-    const { writeToPty, resizePty, onPtyData, onPtyExit, getPtyState, getOutputBuffer, getCurrentWorkspace } = await import('./pty-manager.js');
+    const { writeToPty, resizePty, onPtyData, onPtyExit, getPtyState, getOutputBuffer, getCurrentWorkspace, spawnShell } = await import('./pty-manager.js');
     // const { default: chokidar } = await import('chokidar');
 
     const wss = new WebSocketServer({ noServer: true });
+    terminalWss = wss;
 
     // 多客户端共享 PTY 的尺寸冲突解决：
     // 移动端优先——只要有移动端在线，PTY 始终使用移动端尺寸，
@@ -1811,10 +1900,17 @@ async function setupTerminalWebSocket(httpServer) {
       });
 
       // WebSocket → PTY
-      ws.on('message', (raw) => {
+      ws.on('message', async (raw) => {
         try {
           const msg = JSON.parse(raw.toString());
           if (msg.type === 'input') {
+            // PTY 已退出时，自动 spawn 交互式 shell
+            const state = getPtyState();
+            if (!state.running) {
+              try {
+                await spawnShell();
+              } catch {}
+            }
             // 发送 input 的客户端成为活跃客户端
             if (activeWs !== ws) {
               activeWs = ws;

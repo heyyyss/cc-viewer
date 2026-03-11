@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.14 (2026-03-11)
+
+- Feat: built-in $EDITOR/$VISUAL intercept — Claude Code editor requests open in FileContentView, save and close to continue
+- Feat: editor session management — server-side editorSessions Map with WebSocket broadcast for open/done events
+- Improve: pty-manager passes serverPort, injects CCV_EDITOR_PORT env for ccv-editor.js script
+- Improve: TerminalPanel handles editor-open messages, ChatView/FileContentView support editor session banner
+- i18n: add ui.editorSession.banner across all 18 supported languages
+
 ## 1.5.12 (2026-03-10)
 
 - Feat: CCV process management — list all CCV instances (port 7008-7099), view PID/port/command/start time, stop idle processes from UI

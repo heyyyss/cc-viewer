@@ -180,6 +180,8 @@ class ChatView extends React.Component {
       activeSnapLine: null,
       isDragging: false,
       fileVersion: 0, // 用于强制 FileContentView 重新挂载
+      editorSessionId: null, // active $EDITOR session
+      editorFilePath: null,
     };
     this._fileChangeWs = null; // 文件变更 WebSocket 引用
     this._fileChangeDebounceTimer = null; // 防抖定时器
@@ -1338,7 +1340,17 @@ class ChatView extends React.Component {
               <FileContentView
                 key={this.state.fileVersion}
                 filePath={this.state.currentFile}
-                onClose={() => this.setState({ currentFile: null, fileVersion: 0 })}
+                editorSession={!!this.state.editorSessionId}
+                onClose={() => {
+                  if (this.state.editorSessionId) {
+                    fetch('/api/editor-done', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ sessionId: this.state.editorSessionId }),
+                    }).catch(() => {});
+                  }
+                  this.setState({ currentFile: null, fileVersion: 0, editorSessionId: null, editorFilePath: null });
+                }}
               />
             ) : (
               messageList
@@ -1390,7 +1402,15 @@ class ChatView extends React.Component {
             <>
               <div className={styles.vResizer} onMouseDown={this.handleSplitMouseDown} />
               <div style={{ width: terminalWidth, flexShrink: 0, minWidth: 200, display: 'flex', flexDirection: 'column' }}>
-                <TerminalPanel />
+                <TerminalPanel onEditorOpen={(sessionId, filePath) => {
+                  this.setState({
+                    editorSessionId: sessionId,
+                    editorFilePath: filePath,
+                    currentFile: filePath,
+                    currentGitDiff: null,
+                    fileVersion: (this.state.fileVersion || 0) + 1,
+                  });
+                }} />
               </div>
             </>
           )}

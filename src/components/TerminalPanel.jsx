@@ -274,10 +274,16 @@ class TerminalPanel extends React.Component {
         } else if (msg.type === 'exit') {
           this._flushWrite();
           this.terminal.write(`\r\n\x1b[33m${t('ui.terminal.exited', { code: msg.exitCode ?? '?' })}\x1b[0m\r\n`);
+          this.terminal.write(`\x1b[90m${t('ui.terminal.pressEnterForShell')}\x1b[0m\r\n`);
+        } else if (msg.type === 'editor-open') {
+          if (this.props.onEditorOpen) {
+            this.props.onEditorOpen(msg.sessionId, msg.filePath);
+          }
         } else if (msg.type === 'state') {
           if (!msg.running && msg.exitCode !== null) {
             this._flushWrite();
             this.terminal.write(`\x1b[33m${t('ui.terminal.exited', { code: msg.exitCode })}\x1b[0m\r\n`);
+            this.terminal.write(`\x1b[90m${t('ui.terminal.pressEnterForShell')}\x1b[0m\r\n`);
           }
         }
       } catch {}

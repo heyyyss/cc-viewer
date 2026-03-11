@@ -1495,6 +1495,26 @@ const i18nData = {
     "tr": "[İşlem {code} koduyla çıkış yaptı]",
     "uk": "[Процес завершився з кодом {code}]"
   },
+  "ui.terminal.pressEnterForShell": {
+    "zh": "按 Enter 键启动新的 Shell 会话",
+    "en": "Press Enter to start a new shell session",
+    "zh-TW": "按 Enter 鍵啟動新的 Shell 會話",
+    "ko": "Enter를 눌러 새 셸 세션을 시작하세요",
+    "ja": "Enter キーを押して新しいシェルセッションを開始",
+    "de": "Drücken Sie Enter, um eine neue Shell-Sitzung zu starten",
+    "es": "Presione Enter para iniciar una nueva sesión de shell",
+    "fr": "Appuyez sur Entrée pour démarrer une nouvelle session shell",
+    "it": "Premi Invio per avviare una nuova sessione shell",
+    "da": "Tryk Enter for at starte en ny shell-session",
+    "pl": "Naciśnij Enter, aby uruchomić nową sesję powłoki",
+    "ru": "Нажмите Enter, чтобы запустить новую сессию оболочки",
+    "ar": "اضغط Enter لبدء جلسة shell جديدة",
+    "no": "Trykk Enter for å starte en ny shell-økt",
+    "pt-BR": "Pressione Enter para iniciar uma nova sessão de shell",
+    "th": "กด Enter เพื่อเริ่มเซสชัน Shell ใหม่",
+    "tr": "Yeni bir kabuk oturumu başlatmak için Enter'a basın",
+    "uk": "Натисніть Enter, щоб розпочати нову сесію оболонки"
+  },
   "ui.diffSessionChanged": {
     "zh": "请求体大小减小，可能使用了 /clear、/compact 或 session 发生了变化",
     "en": "Request body size decreased, possibly due to /clear, /compact, or session change",
@@ -3260,6 +3280,26 @@ const i18nData = {
     "da": "Aktuel", "pl": "Bieżący", "ru": "Текущий",
     "ar": "الحالي", "no": "Gjeldende", "pt-BR": "Atual",
     "th": "ปัจจุบัน", "tr": "Mevcut", "uk": "Поточний"
+  },
+  "ui.editorSession.banner": {
+    "zh": "正在为 Claude Code 编辑文件 — 保存并关闭以继续",
+    "en": "Editing for Claude Code — save and close to continue",
+    "zh-TW": "正在為 Claude Code 編輯檔案 — 儲存並關閉以繼續",
+    "ko": "Claude Code용 편집 중 — 저장하고 닫으면 계속됩니다",
+    "ja": "Claude Code のために編集中 — 保存して閉じると続行します",
+    "de": "Bearbeitung für Claude Code — speichern und schließen zum Fortfahren",
+    "es": "Editando para Claude Code — guarda y cierra para continuar",
+    "fr": "Édition pour Claude Code — enregistrez et fermez pour continuer",
+    "it": "Modifica per Claude Code — salva e chiudi per continuare",
+    "da": "Redigerer for Claude Code — gem og luk for at fortsætte",
+    "pl": "Edycja dla Claude Code — zapisz i zamknij, aby kontynuować",
+    "ru": "Редактирование для Claude Code — сохраните и закройте для продолжения",
+    "ar": "تحرير لـ Claude Code — احفظ وأغلق للمتابعة",
+    "no": "Redigerer for Claude Code — lagre og lukk for å fortsette",
+    "pt-BR": "Editando para Claude Code — salve e feche para continuar",
+    "th": "กำลังแก้ไขสำหรับ Claude Code — บันทึกและปิดเพื่อดำเนินการต่อ",
+    "tr": "Claude Code için düzenleniyor — kaydet ve kapat ile devam et",
+    "uk": "Редагування для Claude Code — збережіть і закрийте для продовження"
   }
 };
 

@@ -296,7 +296,7 @@ async function runCliMode(extraClaudeArgs = [], cwd) {
   // 3. 启动 PTY 中的 claude
   const { spawnClaude, killPty } = await import('./pty-manager.js');
   try {
-    await spawnClaude(proxyPort, workingDir, extraClaudeArgs, claudePath, isNpmVersion);
+    await spawnClaude(proxyPort, workingDir, extraClaudeArgs, claudePath, isNpmVersion, port);
   } catch (err) {
     console.error('[CC Viewer] Failed to spawn Claude:', err.message);
     serverMod.stopViewer();

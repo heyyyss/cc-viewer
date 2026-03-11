@@ -4,12 +4,18 @@ import { join, dirname } from 'node:path';
 import { chmodSync, statSync } from 'node:fs';
 import { platform, arch } from 'node:os';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 let ptyProcess = null;
 let dataListeners = [];
 let exitListeners = [];
 let lastExitCode = null;
 let outputBuffer = '';
 let currentWorkspacePath = null;
+let lastWorkspacePath = null; // 进程退出后保留，用于 respawn shell
+let lastPtyCols = 120;
+let lastPtyRows = 30;
 const MAX_BUFFER = 200000;
 let batchBuffer = '';
 let batchScheduled = false;
@@ -65,7 +71,6 @@ function flushBatch() {
 
 function fixSpawnHelperPermissions() {
   try {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
     const os = platform();
     const cpu = arch();
     const helperPath = join(__dirname, 'node_modules', 'node-pty', 'prebuilds', `${os}-${cpu}`, 'spawn-helper');
@@ -76,7 +81,7 @@ function fixSpawnHelperPermissions() {
   } catch {}
 }
 
-export async function spawnClaude(proxyPort, cwd, extraArgs = [], claudePath = null, isNpmVersion = false) {
+export async function spawnClaude(proxyPort, cwd, extraArgs = [], claudePath = null, isNpmVersion = false, serverPort = null) {
   if (ptyProcess) {
     killPty();
   }
@@ -98,6 +103,14 @@ export async function spawnClaude(proxyPort, cwd, extraArgs = [], claudePath = n
   env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}`;
   env.CCV_PROXY_MODE = '1'; // 告诉 interceptor.js 不要再启动 server
 
+  // Override EDITOR/VISUAL to use built-in FileContentView
+  if (serverPort) {
+    const editorScript = join(__dirname, 'lib', 'ccv-editor.js');
+    env.EDITOR = `${process.execPath} ${editorScript}`;
+    env.VISUAL = env.EDITOR;
+    env.CCV_EDITOR_PORT = String(serverPort);
+  }
+
   // 通过 --settings 注入 ANTHROPIC_BASE_URL，确保覆盖 settings.json 中的配置。
   // 仅覆盖 env.ANTHROPIC_BASE_URL，不影响其他 settings 字段。
   const settingsJson = JSON.stringify({
@@ -118,13 +131,74 @@ export async function spawnClaude(proxyPort, cwd, extraArgs = [], claudePath = n
   lastExitCode = null;
   outputBuffer = '';
   currentWorkspacePath = cwd || process.cwd();
+  lastWorkspacePath = currentWorkspacePath;
 
   ptyProcess = pty.spawn(command, args, {
     name: 'xterm-256color',
-    cols: 120,
-    rows: 30,
-    cwd: cwd || process.cwd(),
+    cols: lastPtyCols,
+    rows: lastPtyRows,
+    cwd: currentWorkspacePath,
     env,
+  });
+
+  ptyProcess.onData((data) => {
+    outputBuffer += data;
+    if (outputBuffer.length > MAX_BUFFER) {
+      const rawStart = outputBuffer.length - MAX_BUFFER;
+      const safeStart = findSafeSliceStart(outputBuffer, rawStart);
+      outputBuffer = outputBuffer.slice(safeStart);
+    }
+    batchBuffer += data;
+    if (!batchScheduled) {
+      batchScheduled = true;
+      setImmediate(flushBatch);
+    }
+  });
+
+  ptyProcess.onExit(({ exitCode }) => {
+    flushBatch();
+    lastExitCode = exitCode;
+    ptyProcess = null;
+    // 保留 lastWorkspacePath，不清除，用于 respawn
+    currentWorkspacePath = null;
+    for (const cb of exitListeners) {
+      try { cb(exitCode); } catch {}
+    }
+  });
+
+  return ptyProcess;
+}
+
+export function writeToPty(data) {
+  if (ptyProcess) {
+    ptyProcess.write(data);
+  }
+}
+
+/**
+ * 进程退出后，自动 spawn 一个交互式 shell，让终端恢复可用。
+ * 返回 true 表示成功 spawn，false 表示无需或失败。
+ */
+export async function spawnShell() {
+  if (ptyProcess) return false; // 已有进程在运行
+  const cwd = lastWorkspacePath || process.cwd();
+
+  const ptyMod = await import('node-pty');
+  const pty = ptyMod.default || ptyMod;
+
+  fixSpawnHelperPermissions();
+
+  const shell = process.env.SHELL || '/bin/sh';
+
+  lastExitCode = null;
+  currentWorkspacePath = cwd;
+
+  ptyProcess = pty.spawn(shell, [], {
+    name: 'xterm-256color',
+    cols: lastPtyCols,
+    rows: lastPtyRows,
+    cwd,
+    env: { ...process.env },
   });
 
   ptyProcess.onData((data) => {
@@ -151,16 +225,12 @@ export async function spawnClaude(proxyPort, cwd, extraArgs = [], claudePath = n
     }
   });
 
-  return ptyProcess;
-}
-
-export function writeToPty(data) {
-  if (ptyProcess) {
-    ptyProcess.write(data);
-  }
+  return true;
 }
 
 export function resizePty(cols, rows) {
+  lastPtyCols = cols;
+  lastPtyRows = rows;
   if (ptyProcess) {
     try { ptyProcess.resize(cols, rows); } catch {}
   }

@@ -132,7 +132,7 @@ const darkHighlightStyle = HighlightStyle.define([
 
 const syntaxTheme = syntaxHighlighting(darkHighlightStyle);
 
-export default function FileContentView({ filePath, onClose }) {
+export default function FileContentView({ filePath, onClose, editorSession }) {
   const [content, setContent] = useState(null);
   const [currentContent, setCurrentContent] = useState(null);
   const [error, setError] = useState(null);
@@ -156,7 +156,7 @@ export default function FileContentView({ filePath, onClose }) {
       const res = await fetch('/api/file-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath, content: currentContent }),
+        body: JSON.stringify({ path: filePath, content: currentContent, ...(editorSession ? { editorSession: true } : {}) }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -219,7 +219,7 @@ export default function FileContentView({ filePath, onClose }) {
     setLoading(true);
     setLineCount(0);
 
-    fetch(`/api/file-content?path=${encodeURIComponent(filePath)}`)
+    fetch(`/api/file-content?path=${encodeURIComponent(filePath)}${editorSession ? '&editorSession=true' : ''}`)
       .then((r) => {
         if (!r.ok) {
           return r
@@ -248,7 +248,7 @@ export default function FileContentView({ filePath, onClose }) {
           setLoading(false);
         }
       });
-  }, [filePath]);
+  }, [filePath, editorSession]);
 
   useEffect(() => {
     loadFileContent();
@@ -312,6 +312,11 @@ export default function FileContentView({ filePath, onClose }) {
 
   return (
     <div className={styles.fileContentView}>
+      {editorSession && (
+        <div className={styles.editorBanner}>
+          {i18n('ui.editorSession.banner')}
+        </div>
+      )}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <button className={styles.backBtn} onClick={onClose} title={i18n('ui.backToChat')}>
