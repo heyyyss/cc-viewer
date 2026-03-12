@@ -269,6 +269,8 @@ describe('server API endpoints', { concurrency: false }, () => {
     } else {
       assert.equal(spaRes.status, 404);
     }
+  });
+
   // --- Unknown route falls through to SPA fallback ---
   it('GET /api/nonexistent falls through to SPA fallback', async () => {
     const res = await httpRequest(port, '/api/nonexistent');
