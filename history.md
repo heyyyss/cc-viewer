@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.30 (2026-03-14)
+
+- Fix: QR code popover hardcoded 800px width — now auto-fits content
+
 ## 1.5.29 (2026-03-14)
 
 - Feature: auto-refresh FileExplorer and GitChanges panels when Claude uses file-mutating tools (Write, Edit, Bash, NotebookEdit)
