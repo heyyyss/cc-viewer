@@ -4,6 +4,7 @@ import ChatMessage from './ChatMessage';
 import TerminalPanel, { uploadFileAndGetPath } from './TerminalPanel';
 import FileExplorer from './FileExplorer';
 import FileContentView from './FileContentView';
+import ImageViewer from './ImageViewer';
 import GitChanges from './GitChanges';
 import GitDiffView from './GitDiffView';
 import { extractToolResultText, getModelInfo } from '../utils/helpers';
@@ -16,6 +17,12 @@ import styles from './ChatView.module.css';
 const { Text } = Typography;
 
 const QUEUE_THRESHOLD = 20;
+
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp']);
+function isImageFile(path) {
+  const ext = (path || '').split('.').pop().toLowerCase();
+  return IMAGE_EXTS.has(ext);
+}
 
 const MUTATING_CMD_RE = /\b(rm|mkdir|mv|cp|touch|chmod|chown|ln|git\s+(checkout|reset|stash|merge|rebase|cherry-pick|restore|clean|rm)|npm\s+(install|uninstall|ci)|yarn\s+(add|remove)|pnpm\s+(add|remove|install)|pip\s+install|tar|unzip|curl\s+-[^\s]*o|wget)\b|[^>]>(?!>)|>>/;
 
@@ -1349,22 +1356,40 @@ class ChatView extends React.Component {
             )}
             {this.state.currentFile && (
               <div style={{ position: 'absolute', inset: 0, zIndex: 1, display: 'flex', flexDirection: 'column' }}>
-                <FileContentView
-                  key={this.state.fileVersion}
-                  filePath={this.state.currentFile}
-                  scrollToLine={this.state.scrollToLine}
-                  editorSession={!!this.state.editorSessionId}
-                  onClose={() => {
-                    if (this.state.editorSessionId) {
-                      fetch('/api/editor-done', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sessionId: this.state.editorSessionId }),
-                      }).catch(() => {});
-                    }
-                    this.setState({ currentFile: null, fileVersion: 0, editorSessionId: null, editorFilePath: null });
-                  }}
-                />
+                {isImageFile(this.state.currentFile) ? (
+                  <ImageViewer
+                    key={this.state.fileVersion}
+                    filePath={this.state.currentFile}
+                    editorSession={!!this.state.editorSessionId}
+                    onClose={() => {
+                      if (this.state.editorSessionId) {
+                        fetch('/api/editor-done', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ sessionId: this.state.editorSessionId }),
+                        }).catch(() => {});
+                      }
+                      this.setState({ currentFile: null, fileVersion: 0, editorSessionId: null, editorFilePath: null });
+                    }}
+                  />
+                ) : (
+                  <FileContentView
+                    key={this.state.fileVersion}
+                    filePath={this.state.currentFile}
+                    scrollToLine={this.state.scrollToLine}
+                    editorSession={!!this.state.editorSessionId}
+                    onClose={() => {
+                      if (this.state.editorSessionId) {
+                        fetch('/api/editor-done', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ sessionId: this.state.editorSessionId }),
+                        }).catch(() => {});
+                      }
+                      this.setState({ currentFile: null, fileVersion: 0, editorSessionId: null, editorFilePath: null });
+                    }}
+                  />
+                )}
               </div>
             )}
             {messageList}

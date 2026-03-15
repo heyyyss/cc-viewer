@@ -943,6 +943,56 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // 返回文件原始二进制内容（用于图片预览等）
+  if (url === '/api/file-raw' && (method === 'GET' || method === 'HEAD')) {
+    const reqPath = parsedUrl.searchParams.get('path');
+    const isEditorSession = parsedUrl.searchParams.get('editorSession') === 'true';
+    if (!reqPath) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid path' }));
+      return;
+    }
+    if (!isEditorSession && (reqPath.startsWith('/') || reqPath.includes('..'))) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid path' }));
+      return;
+    }
+    const targetFile = isEditorSession && reqPath.startsWith('/') ? reqPath : join(process.env.CCV_PROJECT_DIR || process.cwd(), reqPath);
+    try {
+      if (!existsSync(targetFile)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `File not found: ${targetFile}` }));
+        return;
+      }
+      const stat = statSync(targetFile);
+      if (!stat.isFile()) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not a file' }));
+        return;
+      }
+      if (stat.size > 10 * 1024 * 1024) {
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'File too large' }));
+        return;
+      }
+      const extMime = {
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+        '.webp': 'image/webp',
+      };
+      const ext = (targetFile.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+      const mime = extMime[ext] || 'application/octet-stream';
+      const data = method === 'HEAD' ? null : readFileSync(targetFile);
+      const size = method === 'HEAD' ? stat.size : data.length;
+      res.writeHead(200, { 'Content-Type': mime, 'Content-Length': size });
+      res.end(data);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `Cannot read file: ${err.message}` }));
+    }
+    return;
+  }
+
   // 保存文件内容 API
   if (url === '/api/file-content' && method === 'POST') {
     const MAX_BODY = 5 * 1024 * 1024; // 5MB，与 GET 路由限制对齐

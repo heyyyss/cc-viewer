@@ -1,4 +1,12 @@
 import { isSkillText, isMainAgent } from './contentFilter.js';
+import modelClaudeUrl from '../img/model-claude.svg';
+import modelOpenaiUrl from '../img/model-openai.svg';
+import modelGeminiUrl from '../img/model-gemini.svg';
+import modelQwenUrl from '../img/model-qwen.svg';
+import modelKimiUrl from '../img/model-kimi.svg';
+import modelGlmUrl from '../img/model-glm.svg';
+import modelMinimaxUrl from '../img/model-minimax.svg';
+import modelDeepseekUrl from '../img/model-deepseek.svg';
 
 const MODEL_CONTEXT_SIZES = [
   { match: /claude/i, tokens: 200000 },
@@ -115,7 +123,7 @@ const MODEL_PROVIDERS = [
   {
     match: /gemini/i,
     name: 'Gemini',
-    color: '#4285F4',
+    color: '#000000',
     svg: '<svg t="1771495622863" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4556" width="200" height="200"><path d="M960 512.896A477.248 477.248 0 0 0 512.896 960h-1.792A477.184 477.184 0 0 0 64 512.896v-1.792A477.184 477.184 0 0 0 511.104 64h1.792A477.248 477.248 0 0 0 960 511.104z" fill="#448AFF" p-id="4557"></path></svg>',
   },
   {
@@ -162,12 +170,12 @@ export function getModelInfo(modelName) {
       };
     }
   }
-  // 未知模型，使用默认 agent 头像
+  // 未知模型，不设 svg，由 renderModelAvatar 使用兜底头像
   return {
     name: modelName,
     provider: modelName,
     color: '#065f46',
-    svg: getSvgAvatar('agent'),
+    svg: null,
   };
 }
 

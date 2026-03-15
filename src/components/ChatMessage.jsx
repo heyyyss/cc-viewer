@@ -7,6 +7,8 @@ import { t } from '../i18n';
 import DiffView from './DiffView';
 import ToolResultView from './ToolResultView';
 import TranslateTag from './TranslateTag';
+import defaultAvatarUrl from '../img/default-avatar.svg';
+import defaultModelAvatarUrl from '../img/default-model-avatar.svg';
 import styles from './ChatMessage.module.css';
 
 const { Text } = Typography;
@@ -62,16 +64,23 @@ class ChatMessage extends React.Component {
     );
   }
 
+  renderModelAvatar(modelInfo) {
+    if (modelInfo?.svg) {
+      return (
+        <div className={styles.avatar} style={{ background: modelInfo.color || '#6b21a8' }}
+          dangerouslySetInnerHTML={{ __html: modelInfo.svg }}
+        />
+      );
+    }
+    return <img src={defaultModelAvatarUrl} className={styles.avatarImg} alt={modelInfo?.name || 'Agent'} />;
+  }
+
   renderUserAvatar(bgColor) {
     const { userProfile } = this.props;
     if (userProfile?.avatar) {
       return <img src={userProfile.avatar} className={styles.avatarImg} alt={userProfile.name || 'User'} />;
     }
-    return (
-      <div className={styles.avatar} style={{ background: bgColor }}
-        dangerouslySetInnerHTML={{ __html: getSvgAvatar('user') }}
-      />
-    );
+    return <img src={defaultAvatarUrl} className={styles.avatarImg} alt={userProfile?.name || 'User'} />;
   }
 
   getUserName() {
@@ -491,9 +500,7 @@ class ChatMessage extends React.Component {
 
     return (
       <div className={styles.messageRow}>
-        <div className={styles.avatar} style={{ background: modelInfo?.color || '#6b21a8' }}
-          dangerouslySetInnerHTML={{ __html: modelInfo?.svg || getSvgAvatar('agent') }}
-        />
+        {this.renderModelAvatar(modelInfo)}
         <div className={styles.contentCol}>
           {this.renderLabel(modelInfo?.name || 'MainAgent')}
           {this.renderHighlightBubble(styles.bubbleAssistant, innerContent)}
@@ -558,9 +565,7 @@ class ChatMessage extends React.Component {
 
     return (
       <div className={styles.messageRow}>
-        <div className={styles.avatar} style={{ background: modelInfo?.color || '#6b21a8' }}
-          dangerouslySetInnerHTML={{ __html: modelInfo?.svg || getSvgAvatar('agent') }}
-        />
+        {this.renderModelAvatar(modelInfo)}
         <div className={styles.contentColLimited}>
           {this.renderLabel(modelInfo?.name || 'MainAgent', ' (Plan)')}
           <div className={styles.bubblePlan}>
