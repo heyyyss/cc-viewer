@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.34 (2026-03-15)
+
+- Fix: chat panel repeatedly refreshing after restart — `watchLogFile()` now initializes `lastSize` to current file size instead of 0, preventing duplicate broadcast of historical entries already sent via `/events` load flow
+
 ## 1.5.32 (2026-03-14)
 
 - Refactor: move proxy-errors.js and proxy-env.js into lib/ directory
